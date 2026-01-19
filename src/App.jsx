@@ -20,13 +20,13 @@ function App() {
 
   const [objects, setObjects] = useState({
     machines: [
-      { id: 'm1', name: 'Stroj A', type: 'Injection Molding', x: 200, y: 150, w: 100, h: 80, color: '#DA291C' },
-      { id: 'm2', name: 'Stroj B', type: 'Injection Molding', x: 200, y: 300, w: 100, h: 80, color: '#DA291C' },
-      { id: 'm3', name: 'Stroj C', type: 'Assembly', x: 200, y: 450, w: 100, h: 80, color: '#DA291C' }
+      { id: 'm1', name: 'Stroj A', type: 'machine', subType: 'Injection', x: 200, y: 150, w: 100, h: 80, color: '#DA291C', handover: { x: 120, y: 40 } },
+      { id: 'm2', name: 'Stroj B', type: 'machine', subType: 'Injection', x: 200, y: 300, w: 100, h: 80, color: '#DA291C', handover: { x: 120, y: 40 } },
+      { id: 'm3', name: 'Stroj C', type: 'machine', subType: 'Assembly', x: 200, y: 450, w: 100, h: 80, color: '#DA291C', handover: { x: 120, y: 40 } }
     ],
     warehouses: [
-      { id: 'w1', name: 'Sklad 1', cap: 100, x: 950, y: 200, w: 150, h: 100, color: '#4298B5' },
-      { id: 'w2', name: 'Sklad 2', cap: 80, x: 950, y: 400, w: 150, h: 100, color: '#4298B5' }
+      { id: 'w1', name: 'Sklad 1', cap: 100, x: 950, y: 200, w: 150, h: 100, color: '#4298B5', handover: { x: -20, y: 50 } },
+      { id: 'w2', name: 'Sklad 2', cap: 80, x: 950, y: 400, w: 150, h: 100, color: '#4298B5', handover: { x: -20, y: 50 } }
     ]
   });
 
@@ -35,6 +35,20 @@ function App() {
   const [corridors, setCorridors] = useState([]);
   const [routes, setRoutes] = useState([]);
   const [simResults, setSimResults] = useState(null);
+
+  const savePreset = () => {
+    const preset = { config, orders, objects, corridors, routes };
+    localStorage.setItem('sim_preset_' + config.name, JSON.stringify(preset));
+    alert('Konfigurace "' + config.name + '" uložena.');
+  };
+
+  const loadPreset = (name) => {
+    const saved = localStorage.getItem('sim_preset_' + name);
+    if (!saved) return;
+    const { config: c, orders: o, objects: obj, corridors: corr, routes: r } = JSON.parse(saved);
+    setConfig(c); setOrders(o); setObjects(obj); setCorridors(corr); setRoutes(r);
+    alert('Konfigurace načtena.');
+  };
 
   const nextStep = () => setStep(s => Math.min(s + 1, 6));
   const prevStep = () => setStep(s => Math.max(s - 1, 1));
@@ -45,151 +59,182 @@ function App() {
   };
 
   return (
-    <div className="dashboard-container">
-      <header className="header">
-        <h1>🏭 Magna Automotive <span>Simulátor V26</span></h1>
-        <div className="step-indicator" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          {[1, 2, 3, 4, 5, 6].map(i => (
-            <div key={i} style={{
-              width: '24px', height: '24px', borderRadius: '50%',
-              background: i === step ? 'var(--primary)' : (i < step ? 'var(--success)' : 'var(--border)'),
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold'
-            }}>
-              {i < step ? '✓' : i}
-            </div>
-          ))}
-          <span style={{ marginLeft: '0.5rem', color: 'var(--text-muted)' }}>{getStepName(step)}</span>
+    <div className="app-shell">
+      <nav className="sidebar">
+        <div className="sidebar-brand">
+          <div className="brand-icon">M</div>
+          <div>
+            <div className="brand-name">Magna OS</div>
+            <div className="brand-sub">Simulátor V26</div>
+          </div>
         </div>
-      </header>
 
-      <main className="main-content">
-        <div className="animate-fade-in">
-          {step === 1 && (
-            <div className="card">
-              <h2>⚙️ Konfigurace projektu</h2>
-              <div className="form-group">
-                <label className="label">Název konfigurace</label>
-                <input
-                  type="text"
-                  className="input"
-                  value={config.name}
-                  onChange={e => setConfig({ ...config, name: e.target.value })}
+        <div className="sidebar-menu">
+          <div className={`menu-item ${step === 1 ? 'active' : ''}`} onClick={() => setStep(1)}>
+            <span className="icon">⚙️</span> Konfigurace
+          </div>
+          <div className={`menu-item ${step === 2 ? 'active' : ''}`} onClick={() => setStep(2)}>
+            <span className="icon">📋</span> Zakázky
+          </div>
+          <div className={`menu-item ${step === 3 ? 'active' : ''}`} onClick={() => setStep(3)}>
+            <span className="icon">🏭</span> Layout
+          </div>
+          <div className={`menu-item ${step === 4 ? 'active' : ''}`} onClick={() => setStep(4)}>
+            <span className="icon">🗺️</span> Trasy
+          </div>
+          <div className={`menu-item ${step === 5 ? 'active' : ''}`} onClick={() => setStep(5)}>
+            <span className="icon">▶️</span> Simulace
+          </div>
+          <div className={`menu-item ${step === 6 ? 'active' : ''}`} onClick={() => setStep(6)}>
+            <span className="icon">📊</span> Výsledky
+          </div>
+        </div>
+
+        <div className="sidebar-footer">
+          <div className="status-badge success">Online</div>
+          <div className="project-name">{config.name}</div>
+        </div>
+      </nav>
+
+      <main className="content-area">
+        <header className="top-bar">
+          <div className="step-tag">{getStepName(step)}</div>
+          <div className="top-actions">
+            <button className="btn btn-sm btn-outline" onClick={savePreset}>💾 Uložit</button>
+            <button className="btn btn-sm btn-outline" onClick={() => {
+              const name = prompt('Zadejte název konfigurace k načtení:', config.name);
+              if (name) loadPreset(name);
+            }}>📂 Načíst</button>
+          </div>
+        </header>
+
+        <div className="scroll-content">
+          <div className="animate-fade-in">
+            {step === 1 && (
+              <div className="card">
+                <h2>⚙️ Konfigurace projektu</h2>
+                <div className="form-group">
+                  <label className="label">Název konfigurace</label>
+                  <input
+                    type="text"
+                    className="input"
+                    value={config.name}
+                    onChange={e => setConfig({ ...config, name: e.target.value })}
+                  />
+                </div>
+                <div className="grid grid-2">
+                  <div className="form-group">
+                    <label className="label">Počet manipulantů: {config.manipulants}</label>
+                    <input
+                      type="range"
+                      min="1"
+                      max="10"
+                      value={config.manipulants}
+                      onChange={e => setConfig({ ...config, manipulants: parseInt(e.target.value) })}
+                      style={{ width: '100%' }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      <span>1</span><span>10</span>
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label className="label">Rychlost chůze: {config.speed} m/s</label>
+                    <input
+                      type="range"
+                      min="1"
+                      max="8"
+                      step="0.1"
+                      value={config.speed}
+                      onChange={e => setConfig({ ...config, speed: parseFloat(e.target.value) })}
+                      style={{ width: '100%' }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      <span>1.0</span><span>8.0</span>
+                    </div>
+                  </div>
+                </div>
+                <div style={{ marginTop: '2rem' }}>
+                  <button className="btn btn-primary" onClick={nextStep}>Pokračovat na zakázky →</button>
+                </div>
+              </div>
+            )}
+
+            {step === 2 && (
+              <div>
+                <OrderManagement orders={orders} setOrders={setOrders} objects={objects} />
+                <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem' }}>
+                  <button className="btn btn-outline" onClick={prevStep}>← Zpět</button>
+                  <button className="btn btn-primary" onClick={nextStep}>Pokračovat na layout →</button>
+                </div>
+              </div>
+            )}
+
+            {step === 3 && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                  <h2>🏭 Layout - Stroje a sklady</h2>
+                </div>
+                <HallLayout
+                  objects={objects}
+                  setObjects={setObjects}
+                  bgImage={bgImage}
+                  setBgImage={setBgImage}
+                  bgScale={bgScale}
+                  setBgScale={setBgScale}
+                />
+                <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem' }}>
+                  <button className="btn btn-outline" onClick={prevStep}>← Zpět</button>
+                  <button className="btn btn-primary" onClick={nextStep}>Pokračovat na trasy →</button>
+                </div>
+              </div>
+            )}
+
+            {step === 4 && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                  <h2>🗺️ Kreslení tras</h2>
+                </div>
+                <RouteEditor
+                  objects={objects}
+                  corridors={corridors}
+                  setCorridors={setCorridors}
+                  routes={routes}
+                  setRoutes={setRoutes}
+                  bgImage={bgImage}
+                  bgScale={bgScale}
+                />
+                <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem' }}>
+                  <button className="btn btn-outline" onClick={prevStep}>← Zpět</button>
+                  <button className="btn btn-primary" onClick={nextStep}>Spustit simulaci ▶️</button>
+                </div>
+              </div>
+            )}
+
+            {step === 5 && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                  <h2>🎮 Simulace v reálném čase</h2>
+                </div>
+                <Simulator
+                  config={config}
+                  objects={objects}
+                  routes={routes}
+                  orders={orders}
+                  bgImage={bgImage}
+                  bgScale={bgScale}
+                  onFinish={handleSimFinish}
                 />
               </div>
-              <div className="grid grid-2">
-                <div className="form-group">
-                  <label className="label">Počet manipulantů: {config.manipulants}</label>
-                  <input
-                    type="range"
-                    min="1"
-                    max="10"
-                    value={config.manipulants}
-                    onChange={e => setConfig({ ...config, manipulants: parseInt(e.target.value) })}
-                    style={{ width: '100%' }}
-                  />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                    <span>1</span><span>10</span>
-                  </div>
-                </div>
-                <div className="form-group">
-                  <label className="label">Rychlost chůze: {config.speed} m/s</label>
-                  <input
-                    type="range"
-                    min="1"
-                    max="8"
-                    step="0.1"
-                    value={config.speed}
-                    onChange={e => setConfig({ ...config, speed: parseFloat(e.target.value) })}
-                    style={{ width: '100%' }}
-                  />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                    <span>1.0</span><span>8.0</span>
-                  </div>
-                </div>
-              </div>
-              <div style={{ marginTop: '2rem' }}>
-                <button className="btn btn-primary" onClick={nextStep}>Pokračovat na zakázky →</button>
-              </div>
-            </div>
-          )}
+            )}
 
-          {step === 2 && (
-            <div>
-              <OrderManagement orders={orders} setOrders={setOrders} />
-              <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem' }}>
-                <button className="btn btn-outline" onClick={prevStep}>← Zpět</button>
-                <button className="btn btn-primary" onClick={nextStep}>Pokračovat na layout →</button>
+            {step === 6 && (
+              <div>
+                {simResults ? (
+                  <ResultsDashboard results={simResults} onRestart={() => setStep(1)} />
+                ) : <p>Čekání na výsledky...</p>}
               </div>
-            </div>
-          )}
-
-          {step === 3 && (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                <h2>🏭 Layout - Stroje a sklady</h2>
-              </div>
-              <HallLayout
-                objects={objects}
-                setObjects={setObjects}
-                bgImage={bgImage}
-                setBgImage={setBgImage}
-                bgScale={bgScale}
-                setBgScale={setBgScale}
-              />
-              <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem' }}>
-                <button className="btn btn-outline" onClick={prevStep}>← Zpět</button>
-                <button className="btn btn-primary" onClick={nextStep}>Pokračovat na trasy →</button>
-              </div>
-            </div>
-          )}
-
-          {step === 4 && (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                <h2>🗺️ Kreslení tras</h2>
-              </div>
-              <RouteEditor
-                objects={objects}
-                corridors={corridors}
-                setCorridors={setCorridors}
-                routes={routes}
-                setRoutes={setRoutes}
-                bgImage={bgImage}
-                bgScale={bgScale}
-              />
-              <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem' }}>
-                <button className="btn btn-outline" onClick={prevStep}>← Zpět</button>
-                <button className="btn btn-primary" onClick={nextStep}>Spustit simulaci ▶️</button>
-              </div>
-            </div>
-          )}
-
-          {step === 5 && (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                <h2>🎮 Simulace v reálném čase</h2>
-              </div>
-              <Simulator
-                config={config}
-                objects={objects}
-                routes={routes}
-                bgImage={bgImage}
-                bgScale={bgScale}
-                onFinish={handleSimFinish}
-              />
-              <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem' }}>
-                <button className="btn btn-outline" onClick={prevStep}>← Zpět</button>
-              </div>
-            </div>
-          )}
-
-          {step === 6 && (
-            <div>
-              {simResults ? (
-                <ResultsDashboard results={simResults} onRestart={() => setStep(1)} />
-              ) : <p>Čekání na výsledky...</p>}
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </main>
     </div>
