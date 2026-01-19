@@ -1,18 +1,20 @@
 import React, { useRef, useEffect, useState } from 'react';
+import { findPath } from './utils/Pathfinding';
 
 const RouteEditor = ({ objects, corridors, setCorridors, routes, setRoutes, bgImage, bgScale }) => {
     const canvasRef = useRef(null);
     const [isDrawing, setIsDrawing] = useState(false);
     const [startPoint, setStartPoint] = useState(null);
     const [mousePos, setMousePos] = useState(null);
+    const [isGenerating, setIsGenerating] = useState(false);
 
     const getSnapPoints = () => {
         const pts = [];
-        objects.machines.forEach(m => {
-            pts.push({ x: m.x, y: m.y + m.h / 2 }, { x: m.x + m.w, y: m.y + m.h / 2 }, { x: m.x + m.w / 2, y: m.y }, { x: m.x + m.w / 2, y: m.y + m.h });
-        });
-        objects.warehouses.forEach(w => {
-            pts.push({ x: w.x, y: w.y + w.h / 2 }, { x: w.x + w.w, y: w.y + w.h / 2 }, { x: w.x + w.w / 2, y: w.y }, { x: w.x + w.w / 2, y: w.y + w.h });
+        [...objects.machines, ...objects.warehouses].forEach(o => {
+            // Corner points
+            pts.push({ x: o.x, y: o.y }, { x: o.x + o.w, y: o.y }, { x: o.x, y: o.y + o.h }, { x: o.x + o.w, y: o.y + o.h });
+            // Handover point
+            if (o.handover) pts.push({ x: o.x + o.handover.x, y: o.y + o.handover.y });
         });
         corridors.forEach(c => { pts.push({ x: c.x1, y: c.y1 }, { x: c.x2, y: c.y2 }); });
         return pts;
@@ -49,15 +51,19 @@ const RouteEditor = ({ objects, corridors, setCorridors, routes, setRoutes, bgIm
 
         // Objects
         [...objects.machines, ...objects.warehouses].forEach(o => {
-            ctx.fillStyle = o.color; ctx.globalAlpha = 0.5;
+            ctx.fillStyle = o.color; ctx.globalAlpha = 0.3;
             ctx.fillRect(o.x, o.y, o.w, o.h); ctx.globalAlpha = 1;
             ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.strokeRect(o.x, o.y, o.w, o.h);
+
+            if (o.handover) {
+                ctx.fillStyle = '#10b981'; ctx.beginPath(); ctx.arc(o.x + o.handover.x, o.y + o.handover.y, 5, 0, Math.PI * 2); ctx.fill();
+            }
         });
 
         // Corridors (Green paths)
         corridors.forEach(c => {
-            ctx.strokeStyle = '#10b981'; ctx.lineWidth = 8; ctx.setLineDash([15, 10]);
-            ctx.beginPath(); ctx.moveTo(c.x1, c.y1); ctx.lineTo(c.x2, c.y2); ctx.stroke(); ctx.setLineDash([]);
+            ctx.strokeStyle = '#10b981'; ctx.lineWidth = 12; ctx.globalAlpha = 0.4;
+            ctx.beginPath(); ctx.moveTo(c.x1, c.y1); ctx.lineTo(c.x2, c.y2); ctx.stroke(); ctx.globalAlpha = 1;
         });
 
         // Preview
@@ -67,16 +73,18 @@ const RouteEditor = ({ objects, corridors, setCorridors, routes, setRoutes, bgIm
             const ty = snap ? snap.y : mousePos.y;
             ctx.strokeStyle = '#10b981'; ctx.lineWidth = 4; ctx.setLineDash([10, 5]);
             ctx.beginPath(); ctx.moveTo(startPoint.x, startPoint.y); ctx.lineTo(tx, ty); ctx.stroke(); ctx.setLineDash([]);
-            if (snap) {
-                ctx.fillStyle = '#10b981'; ctx.beginPath(); ctx.arc(snap.x, snap.y, 8, 0, Math.PI * 2); ctx.fill();
-            }
         }
 
-        // Routes (Gray generated paths)
-        routes.forEach(r => {
-            ctx.strokeStyle = r.green ? '#10b981' : '#64748b'; ctx.lineWidth = r.green ? 3 : 1;
-            ctx.setLineDash(r.green ? [] : [5, 5]);
-            ctx.beginPath(); ctx.moveTo(r.x1, r.y1); ctx.lineTo(r.x2, r.y2); ctx.stroke(); ctx.setLineDash([]);
+        // Routes
+        routes.forEach(route => {
+            if (!route.points || route.points.length < 2) return;
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(route.points[0].x, route.points[0].y);
+            for (let i = 1; i < route.points.length; i++) {
+                ctx.lineTo(route.points[i].x, route.points[i].y);
+            }
+            ctx.stroke();
         });
     };
 
@@ -106,27 +114,25 @@ const RouteEditor = ({ objects, corridors, setCorridors, routes, setRoutes, bgIm
     };
 
     const autoRoutes = () => {
-        const newRoutes = [];
-        objects.machines.forEach(m => {
-            objects.warehouses.forEach(w => {
-                const mx = m.x + m.w / 2;
-                const my = m.y + m.h / 2;
-                const wx = w.x + w.w / 2;
-                const wy = w.y + w.h / 2;
+        setIsGenerating(true);
+        setTimeout(() => { // Async feel
+            const newRoutes = [];
+            const obstacles = [...objects.machines, ...objects.warehouses].map(o => ({ x: o.x, y: o.y, w: o.w, h: o.h }));
 
-                let usesGreen = false;
-                corridors.forEach(c => {
-                    const d1 = Math.sqrt((mx - c.x1) ** 2 + (my - c.y1) ** 2);
-                    const d2 = Math.sqrt((wx - c.x2) ** 2 + (wy - c.y2) ** 2);
-                    const d1b = Math.sqrt((mx - c.x2) ** 2 + (my - c.y2) ** 2);
-                    const d2b = Math.sqrt((wx - c.x1) ** 2 + (wy - c.y1) ** 2);
-                    if ((d1 < 150 && d2 < 150) || (d1b < 150 && d2b < 150)) usesGreen = true;
+            objects.machines.forEach(m => {
+                objects.warehouses.forEach(w => {
+                    const start = { x: m.x + m.handover.x, y: m.y + m.handover.y };
+                    const target = { x: w.x + w.handover.x, y: w.y + w.handover.y };
+
+                    const path = findPath(start, target, 1200, 600, corridors, obstacles);
+                    if (path) {
+                        newRoutes.push({ fromId: m.id, toId: w.id, points: path });
+                    }
                 });
-
-                newRoutes.push({ x1: mx, y1: my, x2: wx, y2: wy, fromId: m.id, toId: w.id, green: usesGreen });
             });
-        });
-        setRoutes(newRoutes);
+            setRoutes(newRoutes);
+            setIsGenerating(false);
+        }, 10);
     };
 
     return (
@@ -135,10 +141,14 @@ const RouteEditor = ({ objects, corridors, setCorridors, routes, setRoutes, bgIm
                 <button className={`btn ${isDrawing ? 'btn-primary' : 'btn-outline'}`} onClick={() => setIsDrawing(!isDrawing)}>
                     {isDrawing ? (startPoint ? '🎯 Vyberte cílový bod' : '🎯 Vyberte startovní bod') : '🟢 Kreslit zelenou chodbu'}
                 </button>
-                <button className="btn btn-secondary" onClick={autoRoutes}>🤖 Automatické trasy</button>
+                <button className="btn btn-secondary" onClick={autoRoutes} disabled={isGenerating}>
+                    {isGenerating ? '⌛ Generování...' : '🤖 Automatické trasy (A*)'}
+                </button>
                 <button className="btn btn-outline" onClick={() => { setCorridors([]); setRoutes([]); }}>🗑️ Vymazat vše</button>
             </div>
-            <canvas ref={canvasRef} width={1200} height={600} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} />
+            <div style={{ background: '#0f172a', borderRadius: '8px', overflow: 'hidden' }}>
+                <canvas ref={canvasRef} width={1200} height={600} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} style={{ cursor: isDrawing ? 'crosshair' : 'default' }} />
+            </div>
         </div>
     );
 };
